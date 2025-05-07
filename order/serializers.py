@@ -28,20 +28,18 @@ class AddCartItemSerializer(serializers.ModelSerializer):
         quantity = self.validated_data['quantity']
 
         try:
-            cart_item = CartItem.objects.get(
-                cart_id=cart_id, product_id=product_id)
+            cart_item = CartItem.objects.get(cart_id=cart_id, product_id=product_id)
             cart_item.quantity += quantity
-            self.instance = cart_item.save()
+            cart_item.save()
+            self.instance = cart_item
         except CartItem.DoesNotExist:
-            self.instance = CartItem.objects.create(
-                cart_id=cart_id, **self.validated_data)
+            self.instance = CartItem.objects.create(cart_id=cart_id, **self.validated_data)
 
         return self.instance
 
     def validate_product_id(self, value):
         if not Product.objects.filter(pk=value).exists():
-            raise serializers.ValidationError(
-                f"Product with id {value} does not exists")
+            raise serializers.ValidationError(f"Product with id {value} does not exist")
         return value
 
 
@@ -53,12 +51,11 @@ class UpdateCartItemSerializer(serializers.ModelSerializer):
 
 class CartItemSerializer(serializers.ModelSerializer):
     product = SimpleProductSerializer()
-    total_price = serializers.SerializerMethodField(
-        method_name='get_total_price')
+    total_price = serializers.SerializerMethodField()
 
     class Meta:
         model = CartItem
-        fields = ['id', 'product', 'quantity', 'product', 'total_price']
+        fields = ['id', 'product', 'quantity', 'total_price']
 
     def get_total_price(self, cart_item: CartItem):
         return cart_item.quantity * cart_item.product.price
@@ -66,8 +63,7 @@ class CartItemSerializer(serializers.ModelSerializer):
 
 class CartSerializer(serializers.ModelSerializer):
     items = CartItemSerializer(many=True, read_only=True)
-    total_price = serializers.SerializerMethodField(
-        method_name='get_total_price')
+    total_price = serializers.SerializerMethodField()
 
     class Meta:
         model = Cart
@@ -75,8 +71,7 @@ class CartSerializer(serializers.ModelSerializer):
         read_only_fields = ['user']
 
     def get_total_price(self, cart: Cart):
-        return sum(
-            [item.product.price * item.quantity for item in cart.items.all()])
+        return sum(item.product.price * item.quantity for item in cart.items.all())
 
 
 class CreateOrderSerializer(serializers.Serializer):
@@ -85,16 +80,13 @@ class CreateOrderSerializer(serializers.Serializer):
     def validate_cart_id(self, cart_id):
         if not Cart.objects.filter(pk=cart_id).exists():
             raise serializers.ValidationError('No cart found with this id')
-
         if not CartItem.objects.filter(cart_id=cart_id).exists():
             raise serializers.ValidationError('Cart is empty')
-
         return cart_id
 
     def create(self, validated_data):
         user_id = self.context['user_id']
         cart_id = validated_data['cart_id']
-
         try:
             order = OrderService.create_order(user_id=user_id, cart_id=cart_id)
             return order
